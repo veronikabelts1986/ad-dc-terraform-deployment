@@ -1,94 +1,151 @@
 # Azure Active Directory Domain Controller — Terraform Deployment
 
-Deploying a Windows Server domain controller on Azure using Terraform (Infrastructure as Code), including troubleshooting real-world deployment issues.
+**Infrastructure-as-Code lab:** provisioning a Windows Server 2022 Active Directory Domain Controller on Azure using Terraform, with a fully automated AD DS installation and forest promotion.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Repository Structure](#repository-structure)
+- [Deployment](#deployment)
+- [Verification](#verification)
+- [Troubleshooting Log](#troubleshooting-log)
+- [Cleanup](#cleanup)
+- [Skills Demonstrated](#skills-demonstrated)
+- [Author](#author)
+
+---
 
 ## Overview
 
-This lab uses Terraform to provision a full Azure environment — resource group, virtual network, subnet, public IP, network security group, NIC, and a Windows Server VM — then uses a Custom Script Extension to automatically install Active Directory Domain Services (AD DS) and promote the server to a new forest, all from a single `terraform apply`.
+This project deploys a complete Active Directory environment on Azure entirely through Terraform — no manual clicking through the Azure Portal for the infrastructure, and no manual Server Manager wizards for the AD role.
 
-**Stack:** Terraform · Azure (`azurerm` provider) · Windows Server 2022 · Active Directory Domain Services
+A single `terraform apply` provisions:
+
+- A dedicated resource group, virtual network, and subnet
+- A network security group scoped to allow RDP
+- A static public IP and network interface
+- A Windows Server 2022 virtual machine
+- A Custom Script Extension that installs the AD DS role and promotes the server to a new Active Directory forest, including DNS
+
+The result is a fully functional, reproducible domain controller that can be built, verified, and torn down on demand — a pattern directly applicable to real enterprise environments where infrastructure is version-controlled rather than manually configured.
+
+---
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    subgraph Local["Local Machine (Windows 11)"]
+    subgraph Local["Local Workstation (Windows 11)"]
         TF[Terraform CLI]
         CLI[Azure CLI]
     end
 
-    subgraph Azure["Azure Subscription - West Europe"]
-        RG[Resource Group<br/>rg-ad-veronika]
-        subgraph Network
-            VNET[Virtual Network<br/>10.0.0.0/16]
-            SUBNET[Subnet<br/>10.0.1.0/24]
-            NSG[Network Security Group<br/>Allow RDP 3389]
-            PIP[Public IP<br/>Static]
+    subgraph Azure["Azure Subscription — West Europe"]
+        RG[("Resource Group<br/>rg-ad-veronika")]
+        subgraph Network["Networking"]
+            VNET["Virtual Network<br/>10.0.0.0/16"]
+            SUBNET["Subnet<br/>10.0.1.0/24"]
+            NSG["Network Security Group<br/>Allow RDP :3389"]
+            PIP["Public IP<br/>Static"]
         end
-        NIC[Network Interface<br/>10.0.1.4]
-        VM[Windows Server 2022 VM<br/>Standard_D2s_v3]
-        EXT[Custom Script Extension<br/>Installs AD DS + DNS]
+        NIC["Network Interface<br/>10.0.1.4"]
+        VM["Windows Server 2022 VM<br/>Standard_D2s_v3"]
+        EXT["Custom Script Extension<br/>Install-ADDSForest"]
     end
 
-    subgraph DC["Result: Domain Controller"]
-        AD[(Active Directory<br/>corp.veronika.lab)]
-        DNS[DNS Server]
+    subgraph Result["Provisioned Domain"]
+        AD[("Active Directory<br/>corp.veronika.lab")]
+        DNS["DNS Server"]
     end
 
-    TF -->|terraform apply| CLI
-    CLI -->|Provisions| RG
-    RG --> VNET
-    VNET --> SUBNET
-    SUBNET --> NIC
-    NIC --> VM
+    Admin(["Administrator"]) -->|az login, terraform apply| TF
+    TF --> CLI
+    CLI --> RG
+    RG --> VNET --> SUBNET --> NIC
     NSG --> NIC
     PIP --> NIC
-    VM --> EXT
-    EXT -->|Install-ADDSForest| AD
+    NIC --> VM --> EXT
+    EXT --> AD
     EXT --> DNS
-
-    User[Admin - RDP Client] -->|mstsc CORP\\adadmin| PIP
+    Admin -->|RDP: CORP\\adadmin| PIP
 ```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Provisioning | Terraform (`hashicorp/azurerm` provider) |
+| Cloud Platform | Microsoft Azure |
+| Operating System | Windows Server 2022 Datacenter |
+| Directory Service | Active Directory Domain Services (AD DS) + DNS |
+| Automation | Azure Custom Script Extension (PowerShell) |
+| CLI Tooling | Azure CLI, PowerShell |
+
+---
 
 ## Prerequisites
 
-- Azure CLI (`az --version`)
-- Terraform v1.3+ (`terraform --version`)
-- An active Azure subscription with available vCPU quota
-- Windows 11 laptop, regular (non-admin) PowerShell for Terraform commands
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) installed and authenticated (`az login`)
+- [Terraform](https://developer.hashicorp.com/terraform/install) v1.3 or later
+- An active Azure subscription with available compute quota
+- Windows PowerShell (non-admin is sufficient for all Terraform commands)
 
-## Files
+---
 
-| File | Purpose |
-|---|---|
-| `main.tf` | All Azure resources + the AD DS install script |
-| `variables.tf` | Input variable declarations |
-| `terraform.tfvars` | Actual values (region, passwords, domain name) — **excluded from git via `.gitignore`** |
-| `outputs.tf` | Prints public IP, domain name, and admin username after apply |
+## Repository Structure
 
-> ⚠️ `terraform.tfvars` contains plaintext passwords. It is listed in `.gitignore` and never committed. A `terraform.tfvars.example` with placeholder values is provided instead.
+```
+az-ad-vm/
+├── main.tf                    # Core resource definitions + AD DS install script
+├── variables.tf                # Input variable declarations
+├── outputs.tf                  # Public IP, domain name, admin username outputs
+├── terraform.tfvars.example    # Sample values — copy to terraform.tfvars and edit
+├── .gitignore                  # Excludes terraform.tfvars, .terraform/, state files
+└── README.md
+```
 
-## Deployment Steps
+> **Security note:** `terraform.tfvars` contains plaintext credentials and is excluded from version control via `.gitignore`. Only `terraform.tfvars.example` (placeholder values) is committed.
+
+---
+
+## Deployment
 
 ```powershell
+# Authenticate
 az login
-cd C:\dev\az-ad-vm
+
+# Initialize providers
 terraform init
+
+# Review the execution plan
 terraform plan
+
+# Provision the environment
 terraform apply
 ```
 
-After apply completes, wait 5–10 minutes for the VM to finish rebooting after AD DS promotion, then RDP in:
+Apply takes roughly 8–13 minutes total: VM provisioning (~5–8 min), followed by the AD DS installation and automatic reboot (~3–5 min).
+
+Once complete, Terraform prints the public IP, domain name, and admin username as outputs. Connect via RDP:
 
 ```powershell
 mstsc /v:<public_ip>
 ```
 
-Login as `CORP\adadmin` (domain format, not local, since the machine has already promoted to a DC).
+**Note:** authenticate using the domain-qualified account (`CORP\adadmin` or `adadmin@corp.veronika.lab`), not a local account — the server has already been promoted to a domain controller by the time it's reachable.
+
+---
 
 ## Verification
 
-Run inside the VM (PowerShell as Administrator):
+Run inside the VM, PowerShell as Administrator:
 
 ```powershell
 Get-Service NTDS | Select-Object Name, Status
@@ -97,47 +154,35 @@ Get-ADDomainController -Filter *
 Resolve-DnsName corp.veronika.lab
 ```
 
-All four returned clean output confirming the forest, domain controller registration, and DNS resolution were working correctly.
+All four commands returned clean output with no errors, confirming:
+- The NTDS service (core AD engine) is running
+- The forest and domain are correctly configured
+- The domain controller is registered
+- DNS is resolving the domain correctly
 
-## Issues Encountered & Fixes
+---
 
-This section documents the real troubleshooting done during deployment — included deliberately, since working through infrastructure failures is as much a part of the skill as the happy path.
+## Troubleshooting Log
 
-### 1. `az login` failed with `AADSTS50076` (MFA required)
-**Cause:** The browser sign-in closed before completing the multi-factor authentication step, so Azure CLI couldn't retrieve any subscriptions.
-**Fix:** Re-ran `az login` and fully completed the MFA prompt in the browser before switching back to the terminal.
+Real issues encountered during deployment, along with root cause and resolution. Included deliberately — diagnosing infrastructure failures is as core to this skill set as a clean deployment.
 
-### 2. VM size unavailable — `SkuNotAvailable` (Standard_D2s_v3, then Standard_B2s, then Standard_B2ms)
-**Cause:** Azure's free-tier/trial subscriptions get lower priority for regional VM size capacity. Multiple common sizes were temporarily out of stock in `uksouth`.
-**Fix:** Discovered that West Europe, Availability Zone 3, had confirmed capacity for `Standard_D2s_v3` (validated first via a manual VM creation attempt in the Portal). Updated `location` to `westeurope` and added `zone = "3"` to the VM resource block.
+| # | Issue | Root Cause | Resolution |
+|---|---|---|---|
+| 1 | `az login` failed with `AADSTS50076` | MFA prompt wasn't completed before the browser session closed | Re-ran `az login`, completed MFA fully, confirmed with `az account show` |
+| 2 | `SkuNotAvailable` for `Standard_D2s_v3`, then `Standard_B2s`, then `Standard_B2ms` | Regional capacity exhaustion for those sizes in `uksouth` (common on trial subscriptions) | Verified availability manually in the Portal's VM size picker; moved deployment to **West Europe, Zone 3**, which had confirmed capacity |
+| 3 | Portal showed "0 vCPUs of 4 remain" | Misread as a hard blocker; `az vm list-usage` confirmed 0 vCPUs were actually in use | No action needed — resolved once the correct region/size combination was in place |
+| 4 | `terraform.tfvars` location value rejected | Pasted the Portal's display label (`"(Europe) West Europe"`) instead of the CLI region code | Corrected to `location = "westeurope"` |
+| 5 | Intermittent `404 ResourceNotFound` on the Virtual Network mid-apply | Azure Resource Manager propagation lag — the VNet was created successfully but a near-simultaneous status check returned a stale 404 | Re-ran `apply`; used `terraform import` to reconcile Terraform's state with the VNet that had, in fact, been created |
+| 6 | Import kept "not sticking" — same conflict on every subsequent apply | **OneDrive sync** was active on the project folder, silently reverting `terraform.tfstate` to an older synced version after each write | Disabled OneDrive sync for the folder (no relocation needed); state held correctly from that point on |
+| 7 | RDP: "Your credentials did not work" | Domain controller was confirmed healthy via Azure **Run Command** (`NTDS: Running`, AD DS installed, account `Enabled`/not locked out) — issue was isolated to the credential itself, likely a keyboard-layout mismatch on special characters | Used Run Command to reset the domain password directly on the VM (`net user adadmin "<password>" /domain`), then logged in successfully |
 
-### 3. Quota confusion — "0 vCPUs of 4 remain"
-**Cause:** Misread as a hard blocker; actually just meant no VM was currently consuming the subscription's 4-vCPU trial limit at that moment (confirmed via `az vm list-usage` and `az vm list --show-details`).
-**Fix:** No action needed once the correct VM size/region combination was found — quota was never actually the bottleneck.
+### Key Lessons
 
-### 4. `terraform.tfvars` location value in the wrong format
-**Cause:** Pasted the Azure Portal's human-readable label (`"(Europe) West Europe"`) directly into `terraform.tfvars` instead of the CLI region code.
-**Fix:** Changed to the correct short code: `westeurope`.
+- **Regional VM capacity ≠ subscription quota.** These are two independent constraints and need to be diagnosed separately — a `SkuNotAvailable` error doesn't necessarily mean you're out of quota.
+- **Cloud-synced folders (OneDrive, Dropbox, Google Drive) are a real hazard for stateful tools.** Any tool that manages its own state file — Terraform included — needs exclusive, uninterrupted write access. Pause sync for that folder while the tool is active.
+- **Azure's Run Command feature is a powerful diagnostic tool.** It allowed verifying AD DS health and resetting a domain password entirely through the Azure control plane, without needing a working RDP session first — useful for troubleshooting VM-level issues from a "outside-in" angle.
 
-### 5. Intermittent `ResourceNotFound` / `404` errors on the Virtual Network during `apply`
-**Cause:** An Azure Resource Manager timing/propagation lag — the VNet was actually being created successfully, but a near-simultaneous status check from Terraform returned a stale 404 before Azure's API had fully caught up.
-**Fix:** Re-ran `terraform apply`; when Azure then reported the VNet "already exists" (since it *had* succeeded), used `terraform import` to bring the existing resource back under Terraform's management:
-```powershell
-terraform import azurerm_virtual_network.main /subscriptions/<sub-id>/resourceGroups/rg-ad-veronika/providers/Microsoft.Network/virtualNetworks/vnet-ad-veronika
-```
-
-### 6. Same import/apply cycle repeating — state kept "forgetting" the VNet
-**Root cause (the real one):** The project folder (`C:\repos\...`) was inside a **OneDrive-synced directory**. OneDrive was periodically re-syncing `terraform.tfstate` mid-operation, silently reverting it to an older synced copy right after each successful import.
-**Fix:** Moved the entire project to a non-synced local path (`C:\dev\az-ad-vm`), re-initialized Terraform there, re-imported the VNet once, and the state held correctly from then on.
-**Lesson:** Never keep a Terraform working directory inside a cloud-sync folder (OneDrive, Dropbox, Google Drive) — the state file needs exclusive, uninterrupted writes.
-
-### 7. RDP login failed — "Your credentials did not work"
-**Cause:** Likely a UK/US keyboard layout mismatch affecting how special characters (e.g. `@`) were interpreted at the login screen, despite AD DS having installed correctly (confirmed via Azure's Run Command feature, which showed `NTDS: Running` and the domain user as `Enabled`/not locked out).
-**Fix:** Used Azure Portal → VM → **Run command → RunPowerShellScript** to reset the domain admin password directly on the VM (bypassing RDP entirely):
-```powershell
-net user adadmin "<new-password>" /domain
-```
-Logged in successfully afterward using `CORP\adadmin` with the freshly-set password.
+---
 
 ## Cleanup
 
@@ -145,11 +190,22 @@ Logged in successfully afterward using `CORP\adadmin` with the freshly-set passw
 terraform destroy
 ```
 
-Confirms with `yes`, removes every resource created (VM, disks, NIC, IP, NSG, VNet, resource group) to stop billing.
+Removes every resource created — VM, disks, NIC, public IP, NSG, VNet, and resource group — in a single confirmed operation, stopping any further billing.
 
-## Key Takeaways
+---
 
-- Infrastructure as Code doesn't eliminate cloud quirks — it surfaces them clearly and makes them reproducible/fixable.
-- Regional VM capacity constraints on trial subscriptions are common and unrelated to actual quota limits — worth checking both separately.
-- Cloud-synced folders (OneDrive/Dropbox) are a genuine hazard for any tool that manages its own state file.
-- Azure's **Run Command** feature is a reliable way to diagnose and fix VM-level issues (like a stuck credential) without needing a working RDP session first.
+## Skills Demonstrated
+
+- Infrastructure as Code (Terraform: providers, resources, variables, outputs, state management)
+- Azure networking fundamentals (VNets, subnets, NSGs, public IPs)
+- Windows Server administration and Active Directory Domain Services deployment
+- PowerShell scripting and remote diagnostics via Azure Run Command
+- Systematic troubleshooting: isolating root cause across CLI auth, cloud capacity, state management, and credential issues
+- Documentation of a real deployment process, including failures and their resolutions
+
+---
+
+## Author
+
+**Veronika**
+Cybersecurity portfolio project — built as part of hands-on Azure home lab work.
