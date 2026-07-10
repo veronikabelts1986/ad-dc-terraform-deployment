@@ -1,4 +1,4 @@
-# Azure Active Directory Domain Controller — Terraform Deployment Lab
+# Azure Active Directory Domain Controller — Terraform Deployment
 
 Deploying a Windows Server domain controller on Azure using Terraform (Infrastructure as Code), including troubleshooting real-world deployment issues.
 
