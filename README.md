@@ -1,6 +1,6 @@
 # Azure Active Directory Domain Controller — Terraform Deployment
 
-WATCH ME BUILD IT https://canva.link/lw1ipeqlr0uz8hu
+## WATCH ME BUILD IT https://canva.link/lw1ipeqlr0uz8hu
 
 **Infrastructure-as-Code lab:** provisioning a Windows Server 2022 Active Directory Domain Controller on Azure using Terraform, with a fully automated AD DS installation and forest promotion.
 
