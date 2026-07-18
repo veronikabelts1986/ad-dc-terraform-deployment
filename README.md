@@ -208,7 +208,7 @@ Real issues encountered during deployment, along with root cause and resolution.
 **Cause:** Azure Resource Manager propagation lag — the VNet was actually created successfully, but a near-simultaneous status check from Terraform hit a stale 404 before Azure's API had caught up.
 **Fix:** Re-ran `terraform apply`. Azure then correctly reported the VNet "already exists," so `terraform import` was used to reconcile Terraform's state with the resource that had, in fact, been created:
 
-<img width="1703" height="1468" alt="06-terraform-import-success" src="https://github.com/user-attachments/assets/0f2e6703-a415-460a-b713-58eb375c5cc9" />
+<img width="1639" height="1351" alt="06-terraform-import-success" src="https://github.com/user-attachments/assets/a773b09d-484c-4233-b401-8ac58abab187" />
 
 
 
