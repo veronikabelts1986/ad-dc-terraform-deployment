@@ -1,3 +1,4 @@
+<img width="536" height="234" alt="01-terraform-plan" src="https://github.com/user-attachments/assets/dce4280e-0eaa-4ba9-832e-826432a98cc8" />
 # Azure Active Directory Domain Controller — Terraform Deployment
 
 ## WATCH ME BUILD IT --> https://canva.link/lw1ipeqlr0uz8hu
