@@ -138,7 +138,7 @@ Apply takes roughly 8–13 minutes total: VM provisioning (~5–8 min), followed
 
 **Clean `terraform plan` output — 9 resources queued, no errors:**
 
-![Terraform plan output](screenshots/01-terraform-plan.jpg)
+![Terraform plan output](image/01-terraform-plan.jpg)
 
 **Successful `terraform apply` — resources created and outputs printed:**
 
