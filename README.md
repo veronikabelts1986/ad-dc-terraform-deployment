@@ -228,7 +228,7 @@ terraform import azurerm_virtual_network.main /subscriptions/<sub-id>/resourceGr
 
 ### 7. RDP login failed — "Your credentials did not work"
 
-<img width="1848" height="2341" alt="08-rdp-credentials-failed" src="https://github.com/user-attachments/assets/5627341f-4eee-409b-993d-27fa7520a161" />
+<img width="1558" height="1591" alt="08-rdp-credentials-failed" src="https://github.com/user-attachments/assets/77af920b-3380-4aa3-9935-1964d1170496" />
 
 
 
